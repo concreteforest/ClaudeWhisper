@@ -9,6 +9,7 @@ from .stateless_llm.stateless_llm_with_template import (
 from .stateless_llm.openai_compatible_llm import AsyncLLM as OpenAICompatibleLLM
 from .stateless_llm.ollama_llm import OllamaLLM
 from .stateless_llm.claude_llm import AsyncLLM as ClaudeLLM
+from .stateless_llm.claude_code_cli import AsyncLLM as ClaudeCodeCLILLM
 
 
 class LLMFactory:
@@ -73,6 +74,11 @@ class LLMFactory:
                 base_url=kwargs.get("base_url"),
                 model=kwargs.get("model"),
                 llm_api_key=kwargs.get("llm_api_key"),
+            )
+        elif llm_provider == "claude_code_cli":
+            return ClaudeCodeCLILLM(
+                claude_path=kwargs.get("claude_path", "claude"),
+                interrupt_method=kwargs.get("interrupt_method", "user"),
             )
         else:
             raise ValueError(f"Unsupported LLM provider: {llm_provider}")

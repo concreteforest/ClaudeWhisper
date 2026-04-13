@@ -209,6 +209,25 @@ class ClaudeConfig(StatelessLLMBaseConfig):
     }
 
 
+class ClaudeCodeCLIConfig(StatelessLLMBaseConfig):
+    """Configuration for Claude Code CLI backend (uses SEAT license, no API key)."""
+
+    claude_path: str = Field("claude", alias="claude_path")
+    interrupt_method: Literal["system", "user"] = Field("user", alias="interrupt_method")
+
+    _DESCRIPTIONS: ClassVar[dict[str, Description]] = {
+        "claude_path": Description(
+            en="Path to the claude CLI executable (default: 'claude', assumes it's on $PATH)",
+            zh="claude CLI 可执行文件路径（默认：'claude'，假设在 $PATH 中）",
+        ),
+    }
+
+    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
+        **StatelessLLMBaseConfig.DESCRIPTIONS,
+        **_DESCRIPTIONS,
+    }
+
+
 class LlamaCppConfig(StatelessLLMBaseConfig):
     """Configuration for LlamaCpp."""
 
@@ -247,6 +266,7 @@ class StatelessLLMConfigs(I18nMixin, BaseModel):
     deepseek_llm: DeepseekConfig | None = Field(None, alias="deepseek_llm")
     groq_llm: GroqConfig | None = Field(None, alias="groq_llm")
     claude_llm: ClaudeConfig | None = Field(None, alias="claude_llm")
+    claude_code_cli: ClaudeCodeCLIConfig | None = Field(None, alias="claude_code_cli")
     llama_cpp_llm: LlamaCppConfig | None = Field(None, alias="llama_cpp_llm")
     mistral_llm: MistralConfig | None = Field(None, alias="mistral_llm")
 
@@ -278,6 +298,10 @@ class StatelessLLMConfigs(I18nMixin, BaseModel):
         "groq_llm": Description(en="Configuration for Groq API", zh="Groq API 配置"),
         "claude_llm": Description(
             en="Configuration for Claude API", zh="Claude API配置"
+        ),
+        "claude_code_cli": Description(
+            en="Configuration for Claude Code CLI backend (SEAT license, no API key required)",
+            zh="Claude Code CLI 后端配置（使用SEAT许可证，无需API密钥）",
         ),
         "llama_cpp_llm": Description(
             en="Configuration for local Llama.cpp", zh="本地Llama.cpp配置"
