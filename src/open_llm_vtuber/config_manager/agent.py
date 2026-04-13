@@ -18,6 +18,7 @@ class BasicMemoryAgentConfig(I18nMixin, BaseModel):
         "stateless_llm_with_template",
         "openai_compatible_llm",
         "claude_llm",
+        "claude_code_cli",
         "llama_cpp_llm",
         "ollama_llm",
         "lmstudio_llm",

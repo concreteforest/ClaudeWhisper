@@ -1,6 +1,6 @@
 # config_manager/system.py
 from pydantic import Field, model_validator
-from typing import Dict, ClassVar
+from typing import Dict, List, ClassVar
 from .i18n import I18nMixin, Description
 
 
@@ -13,6 +13,13 @@ class SystemConfig(I18nMixin):
     config_alts_dir: str = Field(..., alias="config_alts_dir")
     tool_prompts: Dict[str, str] = Field(..., alias="tool_prompts")
     enable_proxy: bool = Field(False, alias="enable_proxy")
+
+    # Wake-word settings (Whisper-based, no external API key required)
+    wake_word_enabled: bool = Field(False, alias="wake_word_enabled")
+    wake_word_phrases: List[str] = Field(
+        default_factory=lambda: ["hey claude", "hey, claude", "hey cloud"],
+        alias="wake_word_phrases",
+    )
 
     DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
         "conf_version": Description(en="Configuration version", zh="配置文件版本"),

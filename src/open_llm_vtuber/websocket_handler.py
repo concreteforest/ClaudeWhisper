@@ -61,7 +61,12 @@ class WSMessage(TypedDict, total=False):
 class WebSocketHandler:
     """Handles WebSocket connections and message routing"""
 
-    def __init__(self, default_context_cache: ServiceContext):
+    def __init__(
+        self,
+        default_context_cache: ServiceContext,
+        wake_word_enabled: bool = False,
+        wake_word_phrases: Optional[List[str]] = None,
+    ):
         """Initialize the WebSocket handler with default context"""
         self.client_connections: Dict[str, WebSocket] = {}
         self.client_contexts: Dict[str, ServiceContext] = {}
@@ -69,6 +74,15 @@ class WebSocketHandler:
         self.current_conversation_tasks: Dict[str, Optional[asyncio.Task]] = {}
         self.default_context_cache = default_context_cache
         self.received_data_buffers: Dict[str, np.ndarray] = {}
+
+        # Wake-word detector (None when disabled)
+        self._wake_detector = None
+        if wake_word_enabled and default_context_cache.asr_engine is not None:
+            from .wake_word.whisper_detector import WhisperWakeWordDetector
+            self._wake_detector = WhisperWakeWordDetector(
+                phrases=wake_word_phrases or ["hey claude"],
+                asr_engine=default_context_cache.asr_engine,
+            )
 
         # Message handlers mapping
         self._message_handlers = self._init_message_handlers()
@@ -502,9 +516,19 @@ class WebSocketHandler:
                     pass
                 elif len(audio_bytes) > 1024:
                     # Detected audio activity (voice)
+                    audio_np = np.frombuffer(audio_bytes, dtype=np.int16).astype(
+                        np.float32
+                    )
+
+                    # Wake-word gate: if enabled, discard audio that doesn't
+                    # start with the configured phrase (e.g. "hey claude").
+                    if self._wake_detector is not None:
+                        if not await self._wake_detector.is_wake_word(audio_np):
+                            return  # silent discard — phrase not detected
+
                     self.received_data_buffers[client_uid] = np.append(
                         self.received_data_buffers[client_uid],
-                        np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32),
+                        audio_np,
                     )
                     await websocket.send_text(
                         json.dumps({"type": "control", "text": "mic-audio-end"})

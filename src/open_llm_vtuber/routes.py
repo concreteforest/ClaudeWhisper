@@ -12,19 +12,29 @@ from .websocket_handler import WebSocketHandler
 from .proxy_handler import ProxyHandler
 
 
-def init_client_ws_route(default_context_cache: ServiceContext) -> APIRouter:
+def init_client_ws_route(
+    default_context_cache: ServiceContext,
+    wake_word_enabled: bool = False,
+    wake_word_phrases=None,
+) -> APIRouter:
     """
     Create and return API routes for handling the `/client-ws` WebSocket connections.
 
     Args:
         default_context_cache: Default service context cache for new sessions.
+        wake_word_enabled: Whether to require a wake phrase before each turn.
+        wake_word_phrases: List of accepted wake phrases (case-insensitive).
 
     Returns:
         APIRouter: Configured router with WebSocket endpoint.
     """
 
     router = APIRouter()
-    ws_handler = WebSocketHandler(default_context_cache)
+    ws_handler = WebSocketHandler(
+        default_context_cache,
+        wake_word_enabled=wake_word_enabled,
+        wake_word_phrases=wake_word_phrases,
+    )
 
     @router.websocket("/client-ws")
     async def websocket_endpoint(websocket: WebSocket):

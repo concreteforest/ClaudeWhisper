@@ -90,8 +90,13 @@ class WebSocketServer:
 
         # Include routes, passing the context instance
         # The context will be populated during the initialize step
+        sys_cfg = config.system_config
         self.app.include_router(
-            init_client_ws_route(default_context_cache=self.default_context_cache),
+            init_client_ws_route(
+                default_context_cache=self.default_context_cache,
+                wake_word_enabled=getattr(sys_cfg, "wake_word_enabled", False),
+                wake_word_phrases=getattr(sys_cfg, "wake_word_phrases", None),
+            ),
         )
         self.app.include_router(
             init_webtool_routes(default_context_cache=self.default_context_cache),
