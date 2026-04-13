@@ -75,4 +75,4 @@ tmp/
 private/
 mcp_servers.json
 
-.vscode/
+.vscode/.worktrees/
