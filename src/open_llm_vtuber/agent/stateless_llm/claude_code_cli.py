@@ -79,6 +79,11 @@ class AsyncLLM(StatelessLLMInterface):
             "",
         )
 
+        if not prompt:
+            logger.warning("chat_completion called with no user message")
+            yield {"type": "error", "message": "No user message found in conversation"}
+            return
+
         for attempt in range(2):
             is_resume = self.session_id is not None
 
@@ -164,9 +169,12 @@ class AsyncLLM(StatelessLLMInterface):
                             process.kill()
                             await process.wait()
 
-                # Collect stderr for diagnostics.
-                stderr_bytes = await process.stderr.read()
-                stderr_text = stderr_bytes.decode("utf-8", errors="replace").strip()
+                # Collect stderr for diagnostics (guarded to avoid deadlock).
+                try:
+                    stderr_bytes = await asyncio.wait_for(process.stderr.read(), timeout=5.0)
+                    stderr_text = stderr_bytes.decode("utf-8", errors="replace").strip()
+                except asyncio.TimeoutError:
+                    stderr_text = "<stderr read timed out>"
 
                 exit_code = process.returncode
 
@@ -208,6 +216,9 @@ class AsyncLLM(StatelessLLMInterface):
                 if process is not None and process.returncode is None:
                     process.kill()
                     await process.wait()
+                # Reset a session that was never successfully used
+                if not is_resume:
+                    self.session_id = None
                 yield {"type": "error", "message": str(exc)}
                 break
 
@@ -227,7 +238,6 @@ class AsyncLLM(StatelessLLMInterface):
             "-p", prompt,
             "--output-format", "stream-json",
             "--include-partial-messages",
-            "--tools", "",
         ]
 
         if is_resume:
