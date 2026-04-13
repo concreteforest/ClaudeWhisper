@@ -74,10 +74,20 @@ class AsyncLLM(StatelessLLMInterface):
             ``{"type": "error", "message": "..."}``
         """
         # Extract only the last user message as the prompt.
-        prompt = next(
+        # Content may be a plain string OR a list of content blocks (OpenAI format).
+        raw = next(
             (m["content"] for m in reversed(messages) if m["role"] == "user"),
             "",
         )
+        if isinstance(raw, list):
+            # Flatten text blocks; ignore image/tool blocks.
+            prompt = " ".join(
+                block.get("text", "")
+                for block in raw
+                if isinstance(block, dict) and block.get("type") == "text"
+            ).strip()
+        else:
+            prompt = raw
 
         if not prompt:
             logger.warning("chat_completion called with no user message")
@@ -104,12 +114,21 @@ class AsyncLLM(StatelessLLMInterface):
 
                 got_stop = False
                 session_error = False
+                # Tracks how many characters we have already yielded from
+                # cumulative "assistant" events so we can compute deltas.
+                accumulated_text = ""
 
                 if process.stdout is None:
                     yield {"type": "error", "message": "Claude CLI stdout unavailable"}
                     break
 
                 # Stream stdout line-by-line with a per-line timeout.
+                # The CLI emits one JSON object per line in stream-json mode.
+                #
+                # Event shape (claude -p --output-format stream-json --verbose):
+                #   {"type":"system", ...}               — session init, ignore
+                #   {"type":"assistant", "message":{...}} — partial/final response
+                #   {"type":"result", "subtype":"success"|"error_*", ...} — done
                 try:
                     while True:
                         try:
@@ -139,14 +158,34 @@ class AsyncLLM(StatelessLLMInterface):
 
                         event_type = event.get("type")
 
-                        if event_type == "content_block_delta":
-                            delta = event.get("delta", {})
-                            if delta.get("type") == "text_delta":
-                                yield {"type": "text_delta", "text": delta.get("text", "")}
+                        if event_type == "assistant":
+                            # Each assistant event contains the FULL content so
+                            # far; compute the incremental delta and yield it.
+                            content_blocks = (
+                                event.get("message", {}).get("content", [])
+                            )
+                            full_text = "".join(
+                                blk.get("text", "")
+                                for blk in content_blocks
+                                if isinstance(blk, dict) and blk.get("type") == "text"
+                            )
+                            if len(full_text) > len(accumulated_text):
+                                delta_text = full_text[len(accumulated_text):]
+                                accumulated_text = full_text
+                                yield {"type": "text_delta", "text": delta_text}
 
-                        elif event_type == "message_stop":
-                            got_stop = True
-                            yield {"type": "message_stop"}
+                        elif event_type == "result":
+                            subtype = event.get("subtype", "")
+                            if subtype == "success":
+                                got_stop = True
+                                yield {"type": "message_stop"}
+                            else:
+                                err_msg = event.get("error", subtype or str(event))
+                                logger.error(f"Claude CLI result error: {err_msg}")
+                                if is_resume and _is_session_error(err_msg):
+                                    session_error = True
+                                else:
+                                    yield {"type": "error", "message": err_msg}
                             break
 
                         elif event_type == "error":
@@ -237,6 +276,7 @@ class AsyncLLM(StatelessLLMInterface):
             self.claude_path,
             "-p", prompt,
             "--output-format", "stream-json",
+            "--verbose",
             "--include-partial-messages",
         ]
 
