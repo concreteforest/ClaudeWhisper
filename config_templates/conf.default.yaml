@@ -23,7 +23,17 @@ system_config:
     # Prompt to enhance the LLM's ability to output speakable text
     # speakable_prompt: 'speakable_prompt'
     # Additional guidance for LLM on how to use tools
-    # tool_guidance_prompt: 'tool_guidance_prompt' 
+    # tool_guidance_prompt: 'tool_guidance_prompt'
+
+  # Wake-word gate (Whisper-based, no API key needed).
+  # When enabled, Claude only activates when you say one of the wake phrases first.
+  wake_word_enabled: false
+  wake_word_phrases:
+    - "hey claude"
+    - "hey, claude"
+    - "hey cloud"
+  # Seconds of inactivity before requiring the wake word again (0 = always require)
+  wake_word_timeout: 60
 
 # configuration for the default character
 character_config:
@@ -293,6 +303,8 @@ character_config:
       # Check out doc at https://github.com/rany2/edge-tts
       # Use `edge-tts --list-voices` to list all available voices
       voice: 'en-US-AvaMultilingualNeural' # 'en-US-AvaMultilingualNeural' #'zh-CN-XiaoxiaoNeural' # 'ja-JP-NanamiNeural'
+      rate: '+0%'   # Speech rate: '+20%' = 20% faster, '-10%' = slower
+      volume: '+0%' # Volume: '+10%' = louder, '-10%' = quieter
 
     # pyttsx3_tts doesn't have any config.
 

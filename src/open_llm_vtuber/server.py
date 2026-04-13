@@ -94,8 +94,9 @@ class WebSocketServer:
         self.app.include_router(
             init_client_ws_route(
                 default_context_cache=self.default_context_cache,
-                wake_word_enabled=getattr(sys_cfg, "wake_word_enabled", False),
-                wake_word_phrases=getattr(sys_cfg, "wake_word_phrases", None),
+                wake_word_enabled=sys_cfg.wake_word_enabled,
+                wake_word_phrases=sys_cfg.wake_word_phrases,
+                wake_word_timeout=sys_cfg.wake_word_timeout,
             ),
         )
         self.app.include_router(

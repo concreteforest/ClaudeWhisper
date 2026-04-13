@@ -16,6 +16,7 @@ def init_client_ws_route(
     default_context_cache: ServiceContext,
     wake_word_enabled: bool = False,
     wake_word_phrases=None,
+    wake_word_timeout: int = 60,
 ) -> APIRouter:
     """
     Create and return API routes for handling the `/client-ws` WebSocket connections.
@@ -24,6 +25,7 @@ def init_client_ws_route(
         default_context_cache: Default service context cache for new sessions.
         wake_word_enabled: Whether to require a wake phrase before each turn.
         wake_word_phrases: List of accepted wake phrases (case-insensitive).
+        wake_word_timeout: Seconds of inactivity before requiring wake word again.
 
     Returns:
         APIRouter: Configured router with WebSocket endpoint.
@@ -34,6 +36,7 @@ def init_client_ws_route(
         default_context_cache,
         wake_word_enabled=wake_word_enabled,
         wake_word_phrases=wake_word_phrases,
+        wake_word_timeout=wake_word_timeout,
     )
 
     @router.websocket("/client-ws")

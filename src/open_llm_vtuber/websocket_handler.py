@@ -2,6 +2,7 @@ from typing import Dict, List, Optional, Callable, TypedDict
 from fastapi import WebSocket, WebSocketDisconnect
 import asyncio
 import json
+import time
 from enum import Enum
 import numpy as np
 from loguru import logger
@@ -66,6 +67,7 @@ class WebSocketHandler:
         default_context_cache: ServiceContext,
         wake_word_enabled: bool = False,
         wake_word_phrases: Optional[List[str]] = None,
+        wake_word_timeout: int = 60,
     ):
         """Initialize the WebSocket handler with default context"""
         self.client_connections: Dict[str, WebSocket] = {}
@@ -75,14 +77,14 @@ class WebSocketHandler:
         self.default_context_cache = default_context_cache
         self.received_data_buffers: Dict[str, np.ndarray] = {}
 
-        # Wake-word detector (None when disabled)
+        # Wake-word detector — lazily initialized on first audio event so that
+        # the ASR engine (populated by initialize()) is available.
         self._wake_detector = None
-        if wake_word_enabled and default_context_cache.asr_engine is not None:
-            from .wake_word.whisper_detector import WhisperWakeWordDetector
-            self._wake_detector = WhisperWakeWordDetector(
-                phrases=wake_word_phrases or ["hey claude"],
-                asr_engine=default_context_cache.asr_engine,
-            )
+        self._wake_word_enabled = wake_word_enabled
+        self._wake_word_phrases = wake_word_phrases or ["hey claude"]
+        self._wake_word_timeout = wake_word_timeout
+        # Maps client_uid → timestamp of last successful interaction (None = locked)
+        self._wake_word_unlocked: Dict[str, float] = {}
 
         # Message handlers mapping
         self._message_handlers = self._init_message_handlers()
@@ -312,9 +314,10 @@ class WebSocketHandler:
         )
 
         # Clean up other client data
+        context = self.client_contexts.pop(client_uid, None)
         self.client_connections.pop(client_uid, None)
-        self.client_contexts.pop(client_uid, None)
         self.received_data_buffers.pop(client_uid, None)
+        self._wake_word_unlocked.pop(client_uid, None)
         if client_uid in self.current_conversation_tasks:
             task = self.current_conversation_tasks[client_uid]
             if task and not task.done():
@@ -322,7 +325,6 @@ class WebSocketHandler:
             self.current_conversation_tasks.pop(client_uid, None)
 
         # Call context close to clean up resources (e.g., MCPClient)
-        context = self.client_contexts.get(client_uid)
         if context:
             await context.close()
 
@@ -520,11 +522,31 @@ class WebSocketHandler:
                         np.float32
                     )
 
-                    # Wake-word gate: if enabled, discard audio that doesn't
-                    # start with the configured phrase (e.g. "hey claude").
-                    if self._wake_detector is not None:
-                        if not await self._wake_detector.is_wake_word(audio_np):
-                            return  # silent discard — phrase not detected
+                    # Wake-word gate: if enabled, apply the same unlock/timeout
+                    # logic as the non-VAD path so follow-up turns don't require
+                    # repeating the wake phrase.
+                    if self._wake_word_enabled:
+                        now = time.time()
+                        last_active = self._wake_word_unlocked.get(client_uid)
+                        if last_active is not None:
+                            if now - last_active < self._wake_word_timeout:
+                                self._wake_word_unlocked[client_uid] = now
+                            else:
+                                logger.info(f"Wake word timeout expired for {client_uid} — re-locking")
+                                del self._wake_word_unlocked[client_uid]
+
+                        if client_uid not in self._wake_word_unlocked:
+                            if self._wake_detector is None and self.default_context_cache.asr_engine is not None:
+                                from .wake_word.whisper_detector import WhisperWakeWordDetector
+                                self._wake_detector = WhisperWakeWordDetector(
+                                    phrases=self._wake_word_phrases,
+                                    asr_engine=self.default_context_cache.asr_engine,
+                                )
+                            if self._wake_detector is not None:
+                                if not await self._wake_detector.is_wake_word(audio_np):
+                                    return  # silent discard — phrase not detected
+                                logger.info(f"Wake word detected for {client_uid} — unlocked for {self._wake_word_timeout}s")
+                                self._wake_word_unlocked[client_uid] = now
 
                     self.received_data_buffers[client_uid] = np.append(
                         self.received_data_buffers[client_uid],
@@ -538,6 +560,53 @@ class WebSocketHandler:
         self, websocket: WebSocket, client_uid: str, data: WSMessage
     ) -> None:
         """Handle triggers that start a conversation"""
+        # Wake-word gate for the non-VAD audio path: check the full buffered
+        # utterance when mic-audio-end fires.
+        if self._wake_word_enabled and data.get("type") == "mic-audio-end":
+            audio_buf = self.received_data_buffers.get(client_uid)
+            if audio_buf is not None and len(audio_buf) > 0:
+                now = time.time()
+
+                # Check if this client is already unlocked and within timeout
+                last_active = self._wake_word_unlocked.get(client_uid)
+                if last_active is not None:
+                    if now - last_active < self._wake_word_timeout:
+                        # Still within window — refresh timestamp and allow
+                        self._wake_word_unlocked[client_uid] = now
+                        logger.debug(
+                            f"Wake word timeout: {self._wake_word_timeout - (now - last_active):.0f}s remaining for {client_uid}"
+                        )
+                    else:
+                        # Timed out — re-lock and fall through to wake word check
+                        logger.info(
+                            f"Wake word timeout expired for {client_uid} — re-locking"
+                        )
+                        del self._wake_word_unlocked[client_uid]
+
+                # If still locked, run the wake word check
+                if client_uid not in self._wake_word_unlocked:
+                    # Lazy-init the detector (ASR engine is ready by now)
+                    if self._wake_detector is None and self.default_context_cache.asr_engine is not None:
+                        from .wake_word.whisper_detector import WhisperWakeWordDetector
+                        self._wake_detector = WhisperWakeWordDetector(
+                            phrases=self._wake_word_phrases,
+                            asr_engine=self.default_context_cache.asr_engine,
+                        )
+                    if self._wake_detector is not None:
+                        if not await self._wake_detector.is_wake_word(audio_buf):
+                            # Wake word not detected — discard audio and tell the
+                            # frontend to re-enable the mic so it doesn't get stuck.
+                            self.received_data_buffers[client_uid] = np.array([])
+                            await websocket.send_text(
+                                json.dumps({"type": "control", "text": "start-mic"})
+                            )
+                            return
+                        # Wake word detected — unlock for follow-ups
+                        logger.info(
+                            f"Wake word detected for {client_uid} — unlocked for {self._wake_word_timeout}s"
+                        )
+                        self._wake_word_unlocked[client_uid] = now
+
         await handle_conversation_trigger(
             msg_type=data.get("type", ""),
             data=data,

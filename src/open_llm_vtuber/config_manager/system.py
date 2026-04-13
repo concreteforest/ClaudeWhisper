@@ -20,6 +20,7 @@ class SystemConfig(I18nMixin):
         default_factory=lambda: ["hey claude", "hey, claude", "hey cloud"],
         alias="wake_word_phrases",
     )
+    wake_word_timeout: int = Field(60, alias="wake_word_timeout")
 
     DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
         "conf_version": Description(en="Configuration version", zh="配置文件版本"),
@@ -35,6 +36,18 @@ class SystemConfig(I18nMixin):
         "enable_proxy": Description(
             en="Enable proxy mode for multiple clients",
             zh="启用代理模式以支持多个客户端使用一个 ws 连接",
+        ),
+        "wake_word_enabled": Description(
+            en="Enable wake word gate (requires phrase before each conversation)",
+            zh="启用唤醒词门控（每次对话前需要说唤醒词）",
+        ),
+        "wake_word_phrases": Description(
+            en="List of accepted wake phrases (case-insensitive)",
+            zh="接受的唤醒词列表（不区分大小写）",
+        ),
+        "wake_word_timeout": Description(
+            en="Seconds of inactivity before requiring wake word again (0 = always require)",
+            zh="再次需要唤醒词前的静默秒数（0 = 每次都需要）",
         ),
     }
 

@@ -25,7 +25,17 @@ system_config:
     # 用来增强LLM输出可发音文本的提示词
     # speakable_prompt: 'speakable_prompt'
     # 额外指导 LLM 如何使用工具的提示词
-    # tool_guidance_prompt: 'tool_guidance_prompt' 
+    # tool_guidance_prompt: 'tool_guidance_prompt'
+
+  # 唤醒词门控（基于 Whisper，无需 API Key）
+  # 启用后，只有说出唤醒词才会激活 Claude
+  wake_word_enabled: false
+  wake_word_phrases:
+    - "hey claude"
+    - "hey, claude"
+    - "hey cloud"
+  # 再次需要唤醒词前的静默秒数（0 = 每次都需要）
+  wake_word_timeout: 60
 
 # 默认角色的配置
 character_config:
@@ -301,6 +311,8 @@ character_config:
       # 查看文档：https://github.com/rany2/edge-tts
       # 使用 `edge-tts --list-voices` 列出所有可用语音
       voice: zh-CN-XiaoxiaoNeural # 'en-US-AvaMultilingualNeural' #'zh-CN-XiaoxiaoNeural' # 'ja-JP-NanamiNeural'
+      rate: '+0%'   # 语速：'+20%' 加快20%，'-10%' 减慢
+      volume: '+0%' # 音量：'+10%' 增大，'-10%' 减小
 
     # pyttsx3_tts 没有任何配置。
 

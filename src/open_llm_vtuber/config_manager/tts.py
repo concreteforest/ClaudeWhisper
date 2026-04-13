@@ -1,5 +1,6 @@
 # config_manager/tts.py
-from pydantic import ValidationInfo, Field, model_validator
+import re
+from pydantic import ValidationInfo, Field, field_validator, model_validator
 from typing import Literal, Optional, Dict, ClassVar
 from .i18n import I18nMixin, Description
 
@@ -151,11 +152,28 @@ class EdgeTTSConfig(I18nMixin):
     """Configuration for Edge TTS."""
 
     voice: str = Field(..., alias="voice")
+    rate: str = Field("+0%", alias="rate")
+    volume: str = Field("+0%", alias="volume")
+
+    @field_validator("rate", "volume", mode="before")
+    @classmethod
+    def validate_prosody_format(cls, v: str) -> str:
+        if not re.match(r"^[+-]\d+%$", str(v)):
+            raise ValueError(f"Must match format '+N%' or '-N%' (e.g. '+20%'), got: {v!r}")
+        return v
 
     DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
         "voice": Description(
             en="Voice name to use for Edge TTS (use 'edge-tts --list-voices' to list available voices)",
             zh="Edge TTS 使用的语音名称（使用 'edge-tts --list-voices' 列出可用语音）",
+        ),
+        "rate": Description(
+            en="Speech rate adjustment, e.g. '+20%' for 20% faster, '-10%' for slower",
+            zh="语速调整，例如 '+20%' 加快20%，'-10%' 减慢",
+        ),
+        "volume": Description(
+            en="Volume adjustment, e.g. '+10%' louder, '-10%' quieter",
+            zh="音量调整，例如 '+10%' 增大，'-10%' 减小",
         ),
     }
 
