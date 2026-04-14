@@ -1,5 +1,5 @@
 # config_manager/llm.py
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, Optional
 from pydantic import BaseModel, Field
 from .i18n import I18nMixin, Description
 
@@ -214,11 +214,16 @@ class ClaudeCodeCLIConfig(StatelessLLMBaseConfig):
 
     claude_path: str = Field("claude", alias="claude_path")
     interrupt_method: Literal["system", "user"] = Field("user", alias="interrupt_method")
+    working_dir: Optional[str] = Field(None, alias="working_dir")
 
     _DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "claude_path": Description(
             en="Path to the claude CLI executable (default: 'claude', assumes it's on $PATH)",
             zh="claude CLI 可执行文件路径（默认：'claude'，假设在 $PATH 中）",
+        ),
+        "working_dir": Description(
+            en="Working directory for the claude subprocess. Claude will read CLAUDE.md from this folder. Change at runtime with 'work in <path>' or '/switchfolder <path>'.",
+            zh="claude 子进程的工作目录。Claude 将读取该文件夹中的 CLAUDE.md。可在运行时通过语音命令更改。",
         ),
     }
 

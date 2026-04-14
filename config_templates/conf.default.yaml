@@ -35,6 +35,9 @@ system_config:
   # Seconds of inactivity before requiring the wake word again (0 = always require)
   wake_word_timeout: 60
 
+  # Show or hide the Live2D avatar. Can also be toggled from the UI button (persisted in browser localStorage).
+  avatar_enabled: true
+
 # configuration for the default character
 character_config:
   conf_name: 'mao_pro' # The name of character configuration file.

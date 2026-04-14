@@ -26,6 +26,7 @@ class AsyncLLM(StatelessLLMInterface):
         self,
         claude_path: str = "claude",
         interrupt_method: str = "user",
+        working_dir: Optional[str] = None,
     ):
         """Initialise the Claude Code CLI backend.
 
@@ -34,18 +35,35 @@ class AsyncLLM(StatelessLLMInterface):
                 executable.
             interrupt_method: Reserved for future use; passed through for
                 interface compatibility.
+            working_dir: Working directory for the subprocess. When set,
+                Claude reads CLAUDE.md from this folder instead of the
+                server's working directory. ``None`` inherits the server CWD.
         """
         self.claude_path = claude_path
         self.session_id: Optional[str] = None
         self.interrupt_method = interrupt_method
+        self._working_dir: Optional[str] = working_dir
 
         logger.info("Initialized Claude Code CLI AsyncLLM")
-        logger.debug(f"claude_path={claude_path!r}, interrupt_method={interrupt_method!r}")
+        logger.debug(
+            f"claude_path={claude_path!r}, interrupt_method={interrupt_method!r}, "
+            f"working_dir={working_dir!r}"
+        )
 
     def reset_session(self) -> None:
         """Discard the current session so the next call starts fresh."""
         logger.debug(f"Resetting session (was: {self.session_id})")
         self.session_id = None
+
+    def set_working_dir(self, path: str) -> None:
+        """Change the working directory for future subprocess calls.
+
+        Resets the current session so the next call starts in the new directory
+        with a clean context.
+        """
+        logger.info(f"Working directory changed: {self._working_dir!r} → {path!r}")
+        self._working_dir = path
+        self.reset_session()
 
     # ------------------------------------------------------------------
     # StatelessLLMInterface implementation
@@ -110,6 +128,7 @@ class AsyncLLM(StatelessLLMInterface):
                     *cmd,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
+                    cwd=self._working_dir or None,
                 )
 
                 got_stop = False

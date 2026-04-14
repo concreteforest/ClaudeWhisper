@@ -79,6 +79,7 @@ class LLMFactory:
             return ClaudeCodeCLILLM(
                 claude_path=kwargs.get("claude_path", "claude"),
                 interrupt_method=kwargs.get("interrupt_method", "user"),
+                working_dir=kwargs.get("working_dir", None),
             )
         else:
             raise ValueError(f"Unsupported LLM provider: {llm_provider}")

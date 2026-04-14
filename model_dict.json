@@ -52,5 +52,26 @@
                 "Tap": 1
             }
         }
+    },
+    {
+        "name": "Alexia",
+        "description": "",
+        "url": "/live2d-models/Alexia/runtime/Alexia.model3.json",
+        "kScale": 0.5,
+        "initialXshift": 0,
+        "initialYshift": 0,
+        "kXOffset": 1150,
+        "idleMotionGroupName": "",
+        "emotionMap": {
+            "neutral": 0,
+            "joy": 9,
+            "sadness": 3,
+            "anger": 7,
+            "fear": 3,
+            "surprise": 8,
+            "disgust": 10,
+            "smirk": 4
+        },
+        "tapMotions": {}
     }
 ]

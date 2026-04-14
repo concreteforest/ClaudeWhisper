@@ -22,6 +22,9 @@ class SystemConfig(I18nMixin):
     )
     wake_word_timeout: int = Field(60, alias="wake_word_timeout")
 
+    # Avatar visibility
+    avatar_enabled: bool = Field(True, alias="avatar_enabled")
+
     DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
         "conf_version": Description(en="Configuration version", zh="配置文件版本"),
         "host": Description(en="Server host address", zh="服务器主机地址"),
@@ -48,6 +51,10 @@ class SystemConfig(I18nMixin):
         "wake_word_timeout": Description(
             en="Seconds of inactivity before requiring wake word again (0 = always require)",
             zh="再次需要唤醒词前的静默秒数（0 = 每次都需要）",
+        ),
+        "avatar_enabled": Description(
+            en="Show or hide the Live2D avatar canvas (default: true). Can also be toggled in the UI.",
+            zh="显示或隐藏 Live2D 虚拟形象画布（默认：true），也可在界面中切换。",
         ),
     }
 

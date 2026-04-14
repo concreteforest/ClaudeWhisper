@@ -2,6 +2,8 @@ from typing import Dict, List, Optional, Callable, TypedDict
 from fastapi import WebSocket, WebSocketDisconnect
 import asyncio
 import json
+import os
+import re
 import time
 from enum import Enum
 import numpy as np
@@ -181,6 +183,7 @@ class WebSocketHandler:
                     "conf_name": session_service_context.character_config.conf_name,
                     "conf_uid": session_service_context.character_config.conf_uid,
                     "client_uid": client_uid,
+                    "avatar_enabled": session_service_context.system_config.avatar_enabled,
                 }
             )
         )
@@ -556,10 +559,86 @@ class WebSocketHandler:
                         json.dumps({"type": "control", "text": "mic-audio-end"})
                     )
 
+    # ------------------------------------------------------------------
+    # Folder-switch command handler
+    # ------------------------------------------------------------------
+
+    _FOLDER_SWITCH_PATTERNS = [
+        r"^/switchfolder\s+(.+)$",
+        r"^(?:let'?s\s+)?work\s+in\s+(.+)$",
+        r"^switch\s+(?:folder|directory|dir)\s+(?:to\s+)?(.+)$",
+        r"^switch\s+to\s+(?:folder|directory|dir)\s+(.+)$",
+    ]
+
+    async def _check_folder_switch(
+        self, websocket: WebSocket, client_uid: str, text: str
+    ) -> bool:
+        """If *text* is a folder-switch command, apply it and return True.
+
+        Only called for text-input messages (not audio), so the text is
+        already the typed/spoken string passed by the frontend.
+        """
+        text_stripped = text.strip()
+        text_lower = text_stripped.lower()
+
+        raw_path: Optional[str] = None
+        for pattern in self._FOLDER_SWITCH_PATTERNS:
+            m = re.match(pattern, text_lower)
+            if m:
+                # Indices are the same in original text (lowercasing preserves length)
+                raw_path = text_stripped[m.start(1) : m.end(1)]
+                break
+
+        if raw_path is None:
+            return False
+
+        # Resolve and validate path
+        raw_path = raw_path.strip().strip("\"'")
+        resolved = os.path.abspath(os.path.expanduser(raw_path))
+
+        if not os.path.isdir(resolved):
+            await websocket.send_text(
+                json.dumps({"type": "full-text", "text": f"Folder not found: {resolved}"})
+            )
+            await websocket.send_text(json.dumps({"type": "control", "text": "start-mic"}))
+            return True
+
+        # Apply to the LLM if it supports set_working_dir
+        context = self.client_contexts.get(client_uid)
+        if (
+            context is not None
+            and context.agent_engine is not None
+            and hasattr(context.agent_engine, "_llm")
+            and hasattr(context.agent_engine._llm, "set_working_dir")
+        ):
+            context.agent_engine._llm.set_working_dir(resolved)
+            logger.info(f"[{client_uid}] Working directory switched to: {resolved}")
+            await websocket.send_text(
+                json.dumps({"type": "full-text", "text": f"Switched to {resolved}."})
+            )
+        else:
+            await websocket.send_text(
+                json.dumps(
+                    {
+                        "type": "full-text",
+                        "text": "Working directory change is not supported with the current LLM backend.",
+                    }
+                )
+            )
+
+        await websocket.send_text(json.dumps({"type": "control", "text": "start-mic"}))
+        return True
+
     async def _handle_conversation_trigger(
         self, websocket: WebSocket, client_uid: str, data: WSMessage
     ) -> None:
         """Handle triggers that start a conversation"""
+        # Folder-switch command intercept for text-input
+        if data.get("type") == "text-input":
+            text = data.get("text", "")
+            if text and await self._check_folder_switch(websocket, client_uid, text):
+                return
+
         # Wake-word gate for the non-VAD audio path: check the full buffered
         # utterance when mic-audio-end fires.
         if self._wake_word_enabled and data.get("type") == "mic-audio-end":
