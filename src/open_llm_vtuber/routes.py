@@ -44,14 +44,18 @@ def init_client_ws_route(
         """WebSocket endpoint for client connections"""
         await websocket.accept()
         client_uid = str(uuid4())
+        logger.info(f"New WebSocket connection accepted: {client_uid}")
 
         try:
+            logger.debug(f"[{client_uid}] Calling handle_new_connection")
             await ws_handler.handle_new_connection(websocket, client_uid)
+            logger.debug(f"[{client_uid}] handle_new_connection completed, starting message communication")
             await ws_handler.handle_websocket_communication(websocket, client_uid)
         except WebSocketDisconnect:
+            logger.info(f"[{client_uid}] WebSocketDisconnect in endpoint")
             await ws_handler.handle_disconnect(client_uid)
         except Exception as e:
-            logger.error(f"Error in WebSocket connection: {e}")
+            logger.error(f"[{client_uid}] Error in WebSocket connection: {type(e).__name__}: {e}", exc_info=True)
             await ws_handler.handle_disconnect(client_uid)
             raise
 

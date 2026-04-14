@@ -129,23 +129,31 @@ class WebSocketHandler:
             Exception: If initialization fails
         """
         try:
+            logger.info(f"[{client_uid}] Starting connection initialization")
+
+            logger.debug(f"[{client_uid}] Initializing service context")
             session_service_context = await self._init_service_context(
                 websocket.send_text, client_uid
             )
+            logger.debug(f"[{client_uid}] Service context initialized")
 
+            logger.debug(f"[{client_uid}] Storing client data")
             await self._store_client_data(
                 websocket, client_uid, session_service_context
             )
+            logger.debug(f"[{client_uid}] Client data stored")
 
+            logger.debug(f"[{client_uid}] Sending initial messages")
             await self._send_initial_messages(
                 websocket, client_uid, session_service_context
             )
+            logger.debug(f"[{client_uid}] Initial messages sent")
 
-            logger.info(f"Connection established for client {client_uid}")
+            logger.info(f"[{client_uid}] Connection established successfully")
 
         except Exception as e:
             logger.error(
-                f"Failed to initialize connection for client {client_uid}: {e}"
+                f"[{client_uid}] Failed to initialize connection: {type(e).__name__}: {e}", exc_info=True
             )
             await self._cleanup_failed_connection(client_uid)
             raise
@@ -171,10 +179,13 @@ class WebSocketHandler:
         session_service_context: ServiceContext,
     ):
         """Send initial connection messages to the client"""
+        logger.debug(f"[{client_uid}] Sending 'Connection established' message")
         await websocket.send_text(
             json.dumps({"type": "full-text", "text": "Connection established"})
         )
+        logger.debug(f"[{client_uid}] Sent 'Connection established' message")
 
+        logger.debug(f"[{client_uid}] Sending 'set-model-and-conf' message")
         await websocket.send_text(
             json.dumps(
                 {
@@ -187,12 +198,12 @@ class WebSocketHandler:
                 }
             )
         )
+        logger.debug(f"[{client_uid}] Sent 'set-model-and-conf' message")
 
         # Send initial group status
+        logger.debug(f"[{client_uid}] Sending group update message")
         await self.send_group_update(websocket, client_uid)
-
-        # Start microphone
-        await websocket.send_text(json.dumps({"type": "control", "text": "start-mic"}))
+        logger.debug(f"[{client_uid}] Sent group update message")
 
     async def _init_service_context(
         self, send_text: Callable, client_uid: str
@@ -230,29 +241,39 @@ class WebSocketHandler:
             websocket: The WebSocket connection
             client_uid: Unique identifier for the client
         """
+        logger.info(f"[{client_uid}] Starting message receive loop")
         try:
             while True:
                 try:
+                    logger.debug(f"[{client_uid}] Waiting for message...")
                     data = await websocket.receive_json()
+                    logger.info(f"[{client_uid}] Received JSON message of type: {data.get('type')}")
                     message_handler.handle_message(client_uid, data)
                     await self._route_message(websocket, client_uid, data)
                 except WebSocketDisconnect:
+                    logger.info(f"[{client_uid}] WebSocketDisconnect raised in message loop")
                     raise
-                except json.JSONDecodeError:
-                    logger.error("Invalid JSON received")
+                except json.JSONDecodeError as e:
+                    logger.error(f"[{client_uid}] Invalid JSON received: {e}")
                     continue
                 except Exception as e:
-                    logger.error(f"Error processing message: {e}")
-                    await websocket.send_text(
-                        json.dumps({"type": "error", "message": str(e)})
-                    )
+                    logger.error(f"[{client_uid}] Error processing message: {type(e).__name__}: {e}", exc_info=True)
+                    try:
+                        await websocket.send_text(
+                            json.dumps({"type": "error", "message": str(e)})
+                        )
+                    except Exception as send_err:
+                        logger.error(f"[{client_uid}] Failed to send error message: {send_err}")
                     continue
 
         except WebSocketDisconnect:
-            logger.info(f"Client {client_uid} disconnected")
+            logger.info(f"[{client_uid}] Client disconnected")
+            raise
+        except asyncio.CancelledError:
+            logger.info(f"[{client_uid}] Message loop cancelled")
             raise
         except Exception as e:
-            logger.error(f"Fatal error in WebSocket communication: {e}")
+            logger.error(f"[{client_uid}] Fatal error in WebSocket communication: {type(e).__name__}: {e}", exc_info=True)
             raise
 
     async def _route_message(
