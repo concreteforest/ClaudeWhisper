@@ -147,12 +147,14 @@ class WebSocketServer:
             name="web_tool",
         )
 
-        # Mount main frontend last (as catch-all)
-        self.app.mount(
-            "/",
-            CORSStaticFiles(directory="frontend", html=True),
-            name="frontend",
-        )
+        # Mount main frontend last (as catch-all) — skip if directory absent
+        # (e.g. when using the standalone Electron frontend-new instead)
+        if os.path.isdir("frontend"):
+            self.app.mount(
+                "/",
+                CORSStaticFiles(directory="frontend", html=True),
+                name="frontend",
+            )
 
     async def initialize(self):
         """Asynchronously load the service context from config.
