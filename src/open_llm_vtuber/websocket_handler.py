@@ -113,6 +113,7 @@ class WebSocketHandler:
             "audio-play-start": self._handle_audio_play_start,
             "request-init-config": self._handle_init_config_request,
             "heartbeat": self._handle_heartbeat,
+            "frontend-playback-complete": self._handle_playback_complete,
         }
 
     async def handle_new_connection(
@@ -296,8 +297,7 @@ class WebSocketHandler:
         if handler:
             await handler(websocket, client_uid, data)
         else:
-            if msg_type != "frontend-playback-complete":
-                logger.warning(f"Unknown message type: {msg_type}")
+            logger.warning(f"Unknown message type: {msg_type}")
 
     async def _handle_group_operation(
         self, websocket: WebSocket, client_uid: str, data: dict
@@ -553,11 +553,10 @@ class WebSocketHandler:
                         now = time.time()
                         last_active = self._wake_word_unlocked.get(client_uid)
                         if last_active is not None:
-                            if now - last_active < self._wake_word_timeout:
-                                self._wake_word_unlocked[client_uid] = now
-                            else:
+                            if now - last_active >= self._wake_word_timeout:
                                 logger.info(f"Wake word timeout expired for {client_uid} — re-locking")
                                 del self._wake_word_unlocked[client_uid]
+                            # else: still within window — don't refresh; timer resets on Claude's response
 
                         if client_uid not in self._wake_word_unlocked:
                             if self._wake_detector is None and self.default_context_cache.asr_engine is not None:
@@ -671,8 +670,7 @@ class WebSocketHandler:
                 last_active = self._wake_word_unlocked.get(client_uid)
                 if last_active is not None:
                     if now - last_active < self._wake_word_timeout:
-                        # Still within window — refresh timestamp and allow
-                        self._wake_word_unlocked[client_uid] = now
+                        # Still within window — allow (timer resets on Claude's response, not here)
                         logger.debug(
                             f"Wake word timeout: {self._wake_word_timeout - (now - last_active):.0f}s remaining for {client_uid}"
                         )
@@ -803,3 +801,18 @@ class WebSocketHandler:
             await websocket.send_json({"type": "heartbeat-ack"})
         except Exception as e:
             logger.error(f"Error sending heartbeat acknowledgment: {e}")
+
+    async def _handle_playback_complete(
+        self, websocket: WebSocket, client_uid: str, data: WSMessage
+    ) -> None:
+        """Reset wake-word timeout when Claude finishes speaking.
+
+        The 30-second window starts from when Claude stops talking, not from
+        when the user last spoke — so the user can reply or follow up naturally
+        right after a response, without needing to repeat the wake word.
+        """
+        if self._wake_word_enabled and client_uid in self._wake_word_unlocked:
+            self._wake_word_unlocked[client_uid] = time.time()
+            logger.debug(
+                f"[{client_uid}] Playback complete — wake word window reset for {self._wake_word_timeout}s"
+            )
