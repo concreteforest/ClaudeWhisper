@@ -236,6 +236,7 @@
     const $textInput   = document.getElementById('text-input');
     const $sendBtn     = document.getElementById('send-btn');
     const $muteBtn     = document.getElementById('mute-btn');
+    const $micBtn      = document.getElementById('mic-btn');
 
     // -------------------------------------------------------------------------
     // State machine
@@ -306,6 +307,7 @@
     // Mute
     // -------------------------------------------------------------------------
     let muted         = false;
+    let micMuted      = false;
     let currentSource = null; // active AudioBufferSourceNode, if any
 
     $muteBtn.addEventListener('click', () => {
@@ -315,6 +317,16 @@
       if (muted && currentSource) {
         try { currentSource.stop(); } catch (_e) {}
         currentSource = null;
+      }
+    });
+
+    $micBtn.addEventListener('click', () => {
+      micMuted = !micMuted;
+      $micBtn.classList.toggle('mic-muted', micMuted);
+      if (micMuted) {
+        stopMicStreaming();
+      } else if (currentState === 'idle') {
+        startMicStreaming();
       }
     });
 
@@ -511,6 +523,7 @@
     }
 
     async function startMicStreaming() {
+      if (micMuted) return;
       if (micStream) return;
 
       try {
