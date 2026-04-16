@@ -324,6 +324,10 @@
       micMuted = !micMuted;
       $micBtn.classList.toggle('mic-muted', micMuted);
       if (micMuted) {
+        // Notify backend if we're cutting off mid-speech
+        if (speechActive && ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'mic-audio-end' }));
+        }
         stopMicStreaming();
       } else if (!inConversation) {
         setState('idle');
@@ -536,8 +540,8 @@
       }
 
       micCtx = new AudioContext();
-      const source    = micCtx.createMediaStreamSource(micStream);
-      const processor = micCtx.createScriptProcessor(4096, 1, 1);
+      const source = micCtx.createMediaStreamSource(micStream);
+      processor    = micCtx.createScriptProcessor(4096, 1, 1);
       source.connect(processor);
       processor.connect(micCtx.destination);
 
