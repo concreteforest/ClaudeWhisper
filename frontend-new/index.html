@@ -325,7 +325,8 @@
       $micBtn.classList.toggle('mic-muted', micMuted);
       if (micMuted) {
         stopMicStreaming();
-      } else if (currentState === 'idle') {
+      } else if (!inConversation) {
+        setState('idle');
         startMicStreaming();
       }
     });
