@@ -75,6 +75,24 @@
     #mute-btn:hover { opacity: 1; }
     #mute-btn.muted  { opacity: 1; }
 
+    #mic-btn {
+      font-size: 13px;
+      line-height: 1;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 4px;
+      -webkit-app-region: no-drag;
+      opacity: 0.55;
+      transition: opacity 0.15s, background 0.15s;
+    }
+    #mic-btn:hover { opacity: 1; }
+    #mic-btn.mic-muted {
+      opacity: 1;
+      background: rgba(239, 68, 68, 0.25);
+    }
+
     /* ---- message history ---- */
     #messages {
       flex: 1;
@@ -197,6 +215,7 @@
     <div id="titlebar">
       <span id="status-dot"></span>
       <span id="status-label">Ready</span>
+      <button id="mic-btn" title="Toggle mic">🎙️</button>
       <button id="mute-btn" title="Toggle mute">🔊</button>
     </div>
     <div id="messages"></div>
